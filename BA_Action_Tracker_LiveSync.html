@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BA Action Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f2f4f8; --surface: #ffffff; --surface2: #f7f8fc; --border: #e2e6f0;
+    --text: #1a1d2e; --muted: #8a92a6; --accent: #5254f0; --accent-light: rgba(82,84,240,0.08);
+    --status-staging: #b45309;    --status-staging-bg: #fef3c7;
+    --status-check: #1d4ed8;      --status-check-bg: #dbeafe;
+    --status-unassigned: #6d28d9; --status-unassigned-bg: #ede9fe;
+    --status-testing: #065f46;    --status-testing-bg: #d1fae5;
+    --status-hold: #991b1b;       --status-hold-bg: #fee2e2;
+    --status-dev: #0e7490;        --status-dev-bg: #cffafe;
+    --status-deployed: #166534;   --status-deployed-bg: #dcfce7;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; min-height: 100vh; padding: 32px 24px; }
+
+  header { margin-bottom: 26px; display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+  .header-left { display: flex; flex-direction: column; gap: 4px; }
+  .header-title { font-family: 'Syne', sans-serif; font-size: 26px; font-weight: 800; letter-spacing: -0.5px; color: var(--text); }
+  .header-title span { color: var(--accent); }
+  .header-sub { font-size: 12px; color: var(--muted); font-family: 'DM Mono', monospace; letter-spacing: 0.04em; }
+  .header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+  .sync-status { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); font-family: 'DM Mono', monospace; }
+  .sync-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex-shrink: 0; transition: background 0.3s; }
+  .sync-dot.syncing { background: #f59e0b; animation: pulse 1s infinite; }
+  .sync-dot.synced  { background: #16a34a; }
+  .sync-dot.error   { background: #dc2626; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  .setup-banner { background: #fffbeb; border: 1.5px solid #fcd34d; border-radius: 12px; padding: 14px 18px; margin-bottom: 20px; display: flex; align-items: flex-start; gap: 12px; }
+  .setup-banner.hidden { display: none; }
+  .setup-banner-icon { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
+  .setup-banner-text { font-size: 13px; line-height: 1.6; color: #92400e; }
+  .setup-banner-text strong { font-weight: 600; }
+  .setup-url-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .setup-url-input { background: #fff; border: 1.5px solid #fcd34d; border-radius: 8px; padding: 6px 10px; font-family: 'DM Mono', monospace; font-size: 12px; color: var(--text); outline: none; width: 340px; }
+  .setup-url-input:focus { border-color: var(--accent); }
+  .setup-save-btn { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 6px 14px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap; }
+  .setup-dismiss { background: transparent; border: none; color: #92400e; font-size: 18px; cursor: pointer; margin-left: auto; padding: 0 4px; flex-shrink: 0; }
+
+  .lock-btn { display: flex; align-items: center; gap: 7px; background: var(--surface); border: 1.5px solid var(--border); border-radius: 10px; padding: 8px 16px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer; color: var(--muted); transition: all 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+  .lock-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .lock-btn.unlocked { border-color: var(--accent); background: var(--accent-light); color: var(--accent); }
+
+  .stats-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+  .stat-chip { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 9px 14px; display: flex; align-items: center; gap: 8px; font-size: 13px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+  .stat-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .stat-count { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 15px; color: var(--text); }
+  .stat-label { color: var(--muted); }
+
+  .controls { display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; align-items: center; }
+  .search-box { background: var(--surface); border: 1.5px solid var(--border); border-radius: 10px; padding: 9px 14px; color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 14px; outline: none; width: 240px; transition: border-color 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+  .search-box:focus { border-color: var(--accent); }
+  .search-box::placeholder { color: var(--muted); }
+  .filter-select { background: var(--surface); border: 1.5px solid var(--border); border-radius: 10px; padding: 9px 14px; color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 14px; outline: none; cursor: pointer; transition: border-color 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+  .filter-select:focus { border-color: var(--accent); }
+  .export-btn { margin-left: auto; background: var(--accent); color: #fff; border: none; border-radius: 10px; padding: 9px 18px; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500; cursor: pointer; transition: opacity 0.2s; box-shadow: 0 2px 8px rgba(82,84,240,0.25); }
+  .export-btn:hover { opacity: 0.88; }
+
+  .tracker-table { width: 100%; border-collapse: separate; border-spacing: 0 5px; font-size: 13.5px; }
+  thead th { text-align: left; padding: 8px 14px; font-family: 'DM Mono', monospace; font-size: 10.5px; font-weight: 500; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; user-select: none; white-space: nowrap; }
+  thead th:hover { color: var(--text); }
+  thead th .sort-icon { margin-left: 3px; opacity: 0.4; }
+  tbody tr { background: var(--surface); transition: box-shadow 0.15s; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+  tbody tr:hover { background: #fafbff; box-shadow: 0 3px 10px rgba(0,0,0,0.09); }
+  tbody td { padding: 12px 14px; vertical-align: middle; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  tbody td:first-child { border-left: 1px solid var(--border); border-radius: 10px 0 0 10px; }
+  tbody td:last-child  { border-right: 1px solid var(--border); border-radius: 0 10px 10px 0; }
+
+  .module-tag { display: inline-block; background: var(--accent-light); color: var(--accent); border-radius: 6px; padding: 2px 8px; font-size: 11.5px; font-family: 'DM Mono', monospace; white-space: nowrap; }
+  .repo-id { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--muted); }
+  .screen-name { font-weight: 400; max-width: 200px; line-height: 1.4; }
+  .ba-name { font-weight: 500; font-size: 13px; }
+  .ba-input { background: #f5f6ff; border: 1.5px solid var(--accent); border-radius: 7px; color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; padding: 4px 8px; width: 160px; outline: none; }
+
+  .status-select { border: none; border-radius: 8px; padding: 4px 24px 4px 10px; font-family: 'DM Sans', sans-serif; font-size: 12.5px; font-weight: 600; cursor: pointer; outline: none; appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23888'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 8px center; transition: filter 0.2s; }
+  .status-select:hover { filter: brightness(0.94); }
+  .status-staging    { background: var(--status-staging-bg);    color: var(--status-staging); }
+  .status-check      { background: var(--status-check-bg);       color: var(--status-check); }
+  .status-unassigned { background: var(--status-unassigned-bg);  color: var(--status-unassigned); }
+  .status-testing    { background: var(--status-testing-bg);     color: var(--status-testing); }
+  .status-hold       { background: var(--status-hold-bg);        color: var(--status-hold); }
+  .status-dev        { background: var(--status-dev-bg);         color: var(--status-dev); }
+  .status-deployed   { background: var(--status-deployed-bg);    color: var(--status-deployed); }
+
+  .comment-cell { font-size: 12.5px; color: var(--muted); max-width: 220px; line-height: 1.4; font-style: italic; }
+  .eta-input { background: transparent; border: 1.5px solid transparent; border-radius: 6px; color: var(--text); font-family: 'DM Mono', monospace; font-size: 12px; padding: 3px 6px; width: 100px; outline: none; transition: border-color 0.2s, background 0.2s; }
+  .eta-input:focus { border-color: var(--border); background: var(--bg); }
+  .ba-update-input { background: transparent; border: 1.5px solid transparent; border-radius: 6px; color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 12.5px; padding: 3px 6px; width: 140px; outline: none; transition: border-color 0.2s, background 0.2s; }
+  .ba-update-input:focus { border-color: var(--border); background: var(--bg); }
+
+  /* Tooltips */
+  .th-wrap { display: inline-flex; align-items: center; gap: 5px; }
+  .tooltip-icon { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; background: var(--muted); color: #fff; font-size: 9px; font-weight: 700; cursor: default; font-family: 'DM Sans', sans-serif; flex-shrink: 0; position: relative; font-style: normal; }
+  .tooltip-icon:hover .tooltip-box { opacity: 1; pointer-events: auto; transform: translateX(-50%) translateY(0); }
+  .tooltip-box { position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%) translateY(4px); background: #1a1d2e; color: #f0f1f5; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 400; line-height: 1.5; padding: 8px 11px; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.18); opacity: 0; pointer-events: none; transition: opacity 0.18s, transform 0.18s; z-index: 100; width: max-content; max-width: 210px; text-transform: none; letter-spacing: 0; }
+  .tooltip-box::after { content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 5px solid transparent; border-top-color: #1a1d2e; }
+
+  .effort-input { background: transparent; border: 1.5px solid transparent; border-radius: 6px; color: var(--text); font-family: 'DM Mono', monospace; font-size: 12px; padding: 3px 6px; width: 72px; outline: none; transition: border-color 0.2s, background 0.2s; text-align: center; }
+  .effort-input:focus { border-color: var(--border); background: var(--bg); }
+  .no-results { text-align: center; padding: 48px; color: var(--muted); font-size: 14px; }
+
+  /* Row sync indicator */
+  .row-saving td:first-child { border-left-color: #f59e0b !important; }
+  .row-saved td:first-child { border-left-color: #16a34a !important; }
+  .row-error td:first-child { border-left-color: #dc2626 !important; }
+
+  .saved-toast { position: fixed; bottom: 24px; right: 24px; color: #fff; padding: 10px 20px; border-radius: 10px; font-size: 13px; font-weight: 500; opacity: 0; transform: translateY(10px); transition: all 0.3s; pointer-events: none; z-index: 999; }
+  .saved-toast.show { opacity: 1; transform: translateY(0); }
+  .saved-toast.success { background: #16a34a; box-shadow: 0 4px 14px rgba(22,163,74,0.3); }
+  .saved-toast.info    { background: #5254f0; box-shadow: 0 4px 14px rgba(82,84,240,0.3); }
+  .saved-toast.err     { background: #dc2626; box-shadow: 0 4px 14px rgba(220,38,38,0.3); }
+
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(26,29,46,0.4); backdrop-filter: blur(4px); z-index: 1000; align-items: center; justify-content: center; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--surface); border-radius: 16px; padding: 32px 28px; width: 340px; box-shadow: 0 20px 60px rgba(0,0,0,0.12); border: 1px solid var(--border); }
+  .modal-title { font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+  .modal-sub { font-size: 13px; color: var(--muted); margin-bottom: 20px; line-height: 1.5; }
+  .modal-input { width: 100%; background: var(--bg); border: 1.5px solid var(--border); border-radius: 10px; padding: 10px 14px; font-family: 'DM Sans', sans-serif; font-size: 14px; color: var(--text); outline: none; margin-bottom: 8px; transition: border-color 0.2s; }
+  .modal-input:focus { border-color: var(--accent); }
+  .modal-input.error { border-color: #dc2626; }
+  .modal-error { font-size: 12px; color: #dc2626; margin-bottom: 14px; min-height: 16px; }
+  .modal-actions { display: flex; gap: 10px; }
+  .modal-cancel { flex: 1; background: var(--bg); border: 1.5px solid var(--border); border-radius: 10px; padding: 10px; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500; cursor: pointer; color: var(--muted); }
+  .modal-cancel:hover { border-color: var(--muted); }
+  .modal-confirm { flex: 1; background: var(--accent); border: none; border-radius: 10px; padding: 10px; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500; cursor: pointer; color: #fff; box-shadow: 0 2px 8px rgba(82,84,240,0.3); }
+  .modal-confirm:hover { opacity: 0.88; }
+
+  .loading-overlay { display: none; position: fixed; inset: 0; background: rgba(242,244,248,0.85); z-index: 500; align-items: center; justify-content: center; flex-direction: column; gap: 14px; }
+  .loading-overlay.show { display: flex; }
+  .spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { font-size: 14px; color: var(--muted); font-family: 'DM Mono', monospace; }
+</style>
+</head>
+<body>
+
+<!-- Loading overlay -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text" id="loadingText">Loading from Google Sheets…</div>
+</div>
+
+<!-- Password Modal -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-title">🔐 Unlock BA Name Editing</div>
+    <div class="modal-sub">Enter the admin password to enable editing of Business Analyst names.</div>
+    <input class="modal-input" type="password" id="pwInput" placeholder="Password" onkeydown="if(event.key==='Enter') confirmPw()">
+    <div class="modal-error" id="pwError"></div>
+    <div class="modal-actions">
+      <button class="modal-cancel" onclick="closeModal()">Cancel</button>
+      <button class="modal-confirm" onclick="confirmPw()">Unlock</button>
+    </div>
+  </div>
+</div>
+
+<header>
+  <div class="header-left">
+    <div class="header-title">BA <span>Action</span> Tracker</div>
+    <div class="header-sub">MY TASKS · Business Analyst Dashboard</div>
+  </div>
+  <div class="header-right">
+    <div class="sync-status">
+      <div class="sync-dot" id="syncDot"></div>
+      <span id="syncLabel">Not connected</span>
+    </div>
+    <button class="lock-btn" id="lockBtn" onclick="toggleLock()">
+      <span id="lockIcon">🔒</span>
+      <span id="lockLabel">BA Names Locked</span>
+    </button>
+  </div>
+</header>
+
+<!-- Setup banner -->
+<div class="setup-banner" id="setupBanner">
+  <div class="setup-banner-icon">⚡</div>
+  <div class="setup-banner-text">
+    <strong>Connect to Google Sheets for live team sync.</strong> Paste your Google Apps Script Web App URL below to enable real-time updates for your whole team.
+    <div class="setup-url-row">
+      <input class="setup-url-input" id="scriptUrlInput" type="text" placeholder="https://script.google.com/macros/s/…/exec">
+      <button class="setup-save-btn" onclick="saveScriptUrl()">Connect</button>
+    </div>
+  </div>
+  <button class="setup-dismiss" onclick="dismissBanner()" title="Dismiss">×</button>
+</div>
+
+<div class="stats-row" id="statsRow"></div>
+
+<div class="controls">
+  <input class="search-box" type="text" placeholder="🔍  Search tasks, BA, module..." id="searchInput" oninput="render()">
+  <select class="filter-select" id="filterStatus" onchange="render()">
+    <option value="">All Statuses</option>
+    <option value="Staging">Staging</option>
+    <option value="Status Check">Status Check</option>
+    <option value="To be assigned">To be assigned</option>
+    <option value="Testing in Progress">Testing in Progress</option>
+    <option value="On Hold">On Hold</option>
+    <option value="DEV">DEV</option>
+    <option value="Deployed">Deployed</option>
+  </select>
+  <select class="filter-select" id="filterModule" onchange="render()">
+    <option value="">All Modules</option>
+  </select>
+  <button class="export-btn" onclick="exportCSV()">⬇ Export CSV</button>
+</div>
+
+<table class="tracker-table">
+  <thead>
+    <tr>
+      <th onclick="sortBy('module')">Module <span class="sort-icon">↕</span></th>
+      <th onclick="sortBy('screen')">Screen / Feature <span class="sort-icon">↕</span></th>
+      <th onclick="sortBy('repoId')">Repo ID <span class="sort-icon">↕</span></th>
+      <th onclick="sortBy('ba')">Business Analyst <span class="sort-icon">↕</span></th>
+      <th><span class="th-wrap">Dev Effort (MD)<i class="tooltip-icon">i<span class="tooltip-box">Estimated man-days to complete development. Enter NA if code has already been pushed to QA.</span></i></span></th>
+      <th><span class="th-wrap">QA Effort (MD)<i class="tooltip-icon">i<span class="tooltip-box">Estimated man-days to complete testing incl. integration. Enter NA if code has already been pushed to Staging.</span></i></span></th>
+      <th onclick="sortBy('status')">Status <span class="sort-icon">↕</span></th>
+      <th><span class="th-wrap">ETA<i class="tooltip-icon">i<span class="tooltip-box">Target date for code to be pushed to Staging. Enter NA if already pushed to Staging.</span></i></span></th>
+      <th><span class="th-wrap">BA Update<i class="tooltip-icon">i<span class="tooltip-box">Latest update provided by the Business Analyst on progress.</span></i></span></th>
+      <th><span class="th-wrap">BA Lead Comment<i class="tooltip-icon">i<span class="tooltip-box">Notes, actions, or guidance from the BA Lead.</span></i></span></th>
+    </tr>
+  </thead>
+  <tbody id="tableBody"></tbody>
+</table>
+
+<div class="saved-toast" id="toast"></div>
+
+<script>
+// ─── CONFIG ──────────────────────────────────────────────────────────────────
+const CORRECT_PW = 'admin';
+const SHEET_NAME = 'Tracker';
+const POLL_INTERVAL = 15000; // re-fetch from Sheets every 15s
+
+const STATUS_OPTIONS = ["Staging","Status Check","To be assigned","Testing in Progress","On Hold","DEV","Deployed"];
+const STATUS_CLASS = { "Staging":"status-staging","Status Check":"status-check","To be assigned":"status-unassigned","Testing in Progress":"status-testing","On Hold":"status-hold","DEV":"status-dev","Deployed":"status-deployed" };
+const STATUS_COLORS = { "Staging":"#b45309","Status Check":"#1d4ed8","To be assigned":"#6d28d9","Testing in Progress":"#065f46","On Hold":"#991b1b","DEV":"#0e7490","Deployed":"#166534" };
+
+// ─── COLUMNS (order must match Google Sheet columns A–J) ──────────────────────
+const COLS = ['module','screen','repoId','ba','devEff','qaEff','status','eta','update','comment'];
+
+// ─── STATE ───────────────────────────────────────────────────────────────────
+let baUnlocked = false;
+let sortKey = null, sortDir = 1;
+let scriptUrl = localStorage.getItem('ba_script_url') || '';
+let pollTimer = null;
+let pendingSaves = {}; // rowIndex → debounce timer
+
+// ─── DEFAULT DATA (fallback when no Sheets connection) ────────────────────────
+let data = [
+  { module:"Dashboards",          screen:"Beneficiary Dashboard >> Emergency Contact", repoId:"#111", ba:"Shreyas Mupparapu",         devEff:"", qaEff:"", status:"Staging",             eta:"", update:"", comment:"" },
+  { module:"Homepage",            screen:"Home Page",                                   repoId:"#16",  ba:"Mayur Komaravelly",          devEff:"", qaEff:"", status:"Status Check",        eta:"", update:"", comment:"" },
+  { module:"Admin Dashboards",    screen:"Super Admin Dashboard",                       repoId:"#17",  ba:"",                           devEff:"", qaEff:"", status:"To be assigned",      eta:"", update:"", comment:"", greyed:true },
+  { module:"Admin Dashboards",    screen:"Admin Dashboard",                             repoId:"#18",  ba:"Akshil Kumar",               devEff:"", qaEff:"", status:"Staging",             eta:"", update:"", comment:"" },
+  { module:"Dashboards",          screen:"Steward Dashboard",                           repoId:"#19",  ba:"Aniket Singh",               devEff:"", qaEff:"", status:"Status Check",        eta:"", update:"", comment:"" },
+  { module:"Dashboards",          screen:"Volunteer Dashboard",                         repoId:"#20",  ba:"Vedika Khandelwal",          devEff:"", qaEff:"", status:"To be assigned",      eta:"", update:"", comment:"" },
+  { module:"Dashboards",          screen:"Beneficiary Dashboard",                       repoId:"#21",  ba:"Sudhisha Palle",             devEff:"", qaEff:"", status:"To be assigned",      eta:"", update:"", comment:"" },
+  { module:"Request Details",     screen:"Organizations",                               repoId:"#22",  ba:"Ahmedunissa",                devEff:"", qaEff:"", status:"To be assigned",      eta:"", update:"", comment:"" },
+  { module:"Request Details",     screen:"Emergency Contact",                           repoId:"#24",  ba:"Aditya Singh Naga",          devEff:"", qaEff:"", status:"Status Check",        eta:"", update:"", comment:"BA to get in touch with PM" },
+  { module:"Request Details",     screen:"More Information",                            repoId:"#25",  ba:"Lenis Rodrigues",            devEff:"", qaEff:"", status:"Staging",             eta:"", update:"", comment:"" },
+  { module:"Request Details",     screen:"Details",                                     repoId:"#26",  ba:"Suyasha Metkar",             devEff:"", qaEff:"", status:"Testing in Progress", eta:"", update:"", comment:"DEV to be completed by 3rd Apr, BA to oversee QA" },
+  { module:"Create Help Request", screen:"Clothing Support",                            repoId:"#27",  ba:"Aakanksha Kondepi",          devEff:"", qaEff:"", status:"To be assigned",      eta:"", update:"", comment:"", greyed:true },
+  { module:"Create Help Request", screen:"Food and Essentials",                         repoId:"#28",  ba:"Sudhisha Palle, Asha Sree",  devEff:"", qaEff:"", status:"To be assigned",      eta:"", update:"", comment:"", greyed:true },
+  { module:"Create Help Request", screen:"Healthcare & Wellbeing",                      repoId:"#29",  ba:"Haritha P",                  devEff:"", qaEff:"", status:"Status Check",        eta:"", update:"", comment:"BA to confirm the status" },
+  { module:"Become a Volunteer",  screen:"Step 1: Terms & Conditions",                  repoId:"#30",  ba:"Haritha P",                  devEff:"", qaEff:"", status:"Status Check",        eta:"", update:"", comment:"BA to take over requirement gathering and update on progress" },
+  { module:"Become a Volunteer",  screen:"Step 2: Identification",                      repoId:"#31",  ba:"Subramanyam Meka",           devEff:"", qaEff:"", status:"To be assigned",      eta:"", update:"", comment:"" },
+  { module:"Become a Volunteer",  screen:"Step 3: Skills",                              repoId:"#32",  ba:"Akash Nair Eruvattu",        devEff:"", qaEff:"", status:"Testing in Progress", eta:"", update:"", comment:"BA to oversee QA and get back on ETA" },
+  { module:"Become a Volunteer",  screen:"Step 4: Availability",                        repoId:"#33",  ba:"Mihir Bhole",                devEff:"", qaEff:"", status:"DEV",                 eta:"", update:"", comment:"Kushi to assign DEV, ETA for dev" },
+  { module:"About Us",            screen:"Our Team",                                    repoId:"#34",  ba:"Aniket Vasaikar",            devEff:"", qaEff:"", status:"To be assigned",      eta:"", update:"", comment:"" },
+  { module:"About Us",            screen:"Our Mission",                                 repoId:"#35",  ba:"Sparsh Deol",                devEff:"", qaEff:"", status:"Status Check",        eta:"", update:"", comment:"BA to reach out to Rashmi." },
+  { module:"Volunteer Services",  screen:"How We Operate",                              repoId:"#36",  ba:"Hariprasad Bolla",           devEff:"", qaEff:"", status:"Status Check",        eta:"", update:"", comment:"BA to prioritise GIT hub." },
+  { module:"Volunteer Services",  screen:"Our Collaborators",                           repoId:"#37",  ba:"Dharineesh Somisetty",       devEff:"", qaEff:"", status:"Status Check",        eta:"", update:"", comment:"BA to get in touch with PM and update status" },
+  { module:"Contact Us",          screen:"Contact Us Page",                             repoId:"#38",  ba:"",                           devEff:"", qaEff:"", status:"To be assigned",      eta:"", update:"", comment:"BA to get in touch with PM and update status", greyed:true },
+  { module:"Notifications",       screen:"All Notifications",                           repoId:"#39",  ba:"Uday Kumar Jalgam",          devEff:"", qaEff:"", status:"Status Check",        eta:"", update:"", comment:"BA to get in touch with PM and update status" },
+  { module:"Notifications",       screen:"Volunteer Match",                             repoId:"#40",  ba:"Yashwanth Vungarala",        devEff:"", qaEff:"", status:"Status Check",        eta:"", update:"", comment:"BA to get in touch with PM and update status" },
+  { module:"Notifications",       screen:"Help Request Notifications",                  repoId:"#41",  ba:"Ameer Sohail Khan",          devEff:"", qaEff:"", status:"Status Check",        eta:"", update:"", comment:"" },
+  { module:"Notifications",       screen:"Settings",                                    repoId:"#42",  ba:"Karuna Sri Gudisena",        devEff:"", qaEff:"", status:"Status Check",        eta:"", update:"", comment:"BA unable to reach out to PMs" },
+  { module:"Donate",              screen:"Donate Page",                                 repoId:"#43",  ba:"",                           devEff:"", qaEff:"", status:"To be assigned",      eta:"", update:"", comment:"", greyed:true },
+  { module:"Profile",             screen:"Profile Photo Page",                          repoId:"#44",  ba:"Ashikul Kabir",              devEff:"", qaEff:"", status:"To be assigned",      eta:"", update:"", comment:"", greyed:true },
+  { module:"Profile",             screen:"Your Profile Page",                           repoId:"#45",  ba:"Ashikul Kabir",              devEff:"", qaEff:"", status:"To be assigned",      eta:"", update:"", comment:"", greyed:true },
+  { module:"Profile",             screen:"Personal Information Page",                   repoId:"#46",  ba:"Ashikul Kabir",              devEff:"", qaEff:"", status:"To be assigned",      eta:"", update:"", comment:"", greyed:true },
+  { module:"Profile",             screen:"Identity Document Page",                      repoId:"#47",  ba:"Sahil Raorane",              devEff:"", qaEff:"", status:"To be assigned",      eta:"", update:"", comment:"", greyed:true },
+  { module:"Profile",             screen:"Change Password Page",                        repoId:"#48",  ba:"",                           devEff:"", qaEff:"", status:"To be assigned",      eta:"", update:"", comment:"", greyed:true },
+  { module:"Profile",             screen:"Organization Details Page",                   repoId:"#49",  ba:"Goutham Reddy",              devEff:"", qaEff:"", status:"To be assigned",      eta:"", update:"", comment:"", greyed:true },
+  { module:"Profile",             screen:"Skills Page",                                 repoId:"#50",  ba:"Bharath Sanu",               devEff:"", qaEff:"", status:"Status Check",        eta:"", update:"", comment:"" },
+  { module:"Profile",             screen:"Availability Page",                           repoId:"#51",  ba:"Trishul Kummari",            devEff:"", qaEff:"", status:"Status Check",        eta:"", update:"", comment:"BA unable to reach out to PMs" },
+  { module:"Profile",             screen:"Preferences Page",                            repoId:"#52",  ba:"Saumya Prasad",              devEff:"", qaEff:"", status:"Status Check",        eta:"", update:"", comment:"" },
+  { module:"Profile",             screen:"Sign Off Page",                               repoId:"#53",  ba:"Manoj Suresh",               devEff:"", qaEff:"", status:"To be assigned",      eta:"", update:"", comment:"", greyed:true },
+  { module:"Home",                screen:"Log In Page",                                 repoId:"#54",  ba:"Deepthi Sathyanarayanan",    devEff:"", qaEff:"", status:"On Hold",             eta:"", update:"Integration blocker?", comment:"Got in touch with Usha Shree re: backend dev reassignment. Google integration needed." },
+  { module:"Home",                screen:"Sign-Up Page",                                repoId:"#55",  ba:"Bharath Sanu",               devEff:"", qaEff:"", status:"Status Check",        eta:"", update:"", comment:"" },
+  { module:"Home",                screen:"Forget Password Page",                        repoId:"#56",  ba:"Likhitha Konepalli",         devEff:"", qaEff:"", status:"To be assigned",      eta:"", update:"", comment:"" },
+  { module:"UI",                  screen:"Bread-crumbs",                                repoId:"#57",  ba:"Aniket Vasaikar",            devEff:"", qaEff:"", status:"Status Check",        eta:"", update:"", comment:"" },
+  { module:"Footer",              screen:"Terms and Conditions",                        repoId:"#58",  ba:"Trishul Kummari",            devEff:"", qaEff:"", status:"Status Check",        eta:"", update:"", comment:"" },
+  { module:"Footer",              screen:"Privacy Policy",                              repoId:"#59",  ba:"Alka Rani",                  devEff:"", qaEff:"", status:"Status Check",        eta:"", update:"", comment:"" },
+  { module:"Footer",              screen:"Site Map",                                    repoId:"#60",  ba:"Dennis Mcleord Annavarapu",  devEff:"", qaEff:"", status:"Status Check",        eta:"", update:"", comment:"" },
+  { module:"Request Details",     screen:"Comments",                                    repoId:"#62",  ba:"Mayur Komaravelly",          devEff:"", qaEff:"", status:"Staging",             eta:"", update:"", comment:"" },
+  { module:"Create Help Request", screen:"Education & Career Support",                  repoId:"#63",  ba:"Lenis Rodrigues",            devEff:"", qaEff:"", status:"Testing in Progress", eta:"", update:"", comment:"QA in progress (need ETA)" },
+  { module:"Create Help Request", screen:"Elderly Support",                             repoId:"#64",  ba:"Vedant Brahmbhatt",          devEff:"", qaEff:"", status:"Testing in Progress", eta:"", update:"", comment:"Integration in Progress (need ETA for demo)" },
+  { module:"Create Help Request", screen:"Housing Support",                             repoId:"#65",  ba:"Akshil Kumar",               devEff:"", qaEff:"", status:"Testing in Progress", eta:"", update:"", comment:"QA in progress (need ETA)" },
+  { module:"Request Details",     screen:"Volunteers",                                  repoId:"#66",  ba:"Harshini Balam",             devEff:"", qaEff:"", status:"Testing in Progress", eta:"", update:"", comment:"QA in Progress (need ETA)" },
+  { module:"Integration",         screen:"Google Login/Signup",                         repoId:"#67",  ba:"Soumya Singh",               devEff:"", qaEff:"", status:"Status Check",        eta:"", update:"", comment:"BA to get in touch with PM, BRD is defined." },
+  { module:"Integration",         screen:"Facebook Login/Signup",                       repoId:"#68",  ba:"Swathi Thota",               devEff:"", qaEff:"", status:"Status Check",        eta:"", update:"", comment:"" },
+  { module:"Integration",         screen:"LinkedIn Login/Signup",                       repoId:"#69",  ba:"Pratham",                    devEff:"", qaEff:"", status:"Status Check",        eta:"", update:"", comment:"" },
+  { module:"Integration",         screen:"Amazon Login/Signup",                         repoId:"#70",  ba:"Manas",                      devEff:"", qaEff:"", status:"Status Check",        eta:"", update:"", comment:"" },
+  { module:"Geo Spatial",         screen:"Update Volunteer Location",                   repoId:"#71",  ba:"Shreyas Mupparapu",          devEff:"", qaEff:"", status:"Status Check",        eta:"", update:"", comment:"" },
+  { module:"Communication",       screen:"WhatsApp Integration",                        repoId:"#72",  ba:"Saumya Prasad / Onam Priya", devEff:"", qaEff:"", status:"On Hold",             eta:"", update:"", comment:"Front end dev completed, API issue. Rashmi unable to proceed." }
+];
+
+// ─── GOOGLE SHEETS SYNC ───────────────────────────────────────────────────────
+function setSyncStatus(state, label) {
+  const dot = document.getElementById('syncDot');
+  const lbl = document.getElementById('syncLabel');
+  dot.className = 'sync-dot ' + state;
+  lbl.textContent = label;
+}
+
+async function fetchFromSheets() {
+  if (!scriptUrl) return;
+  try {
+    setSyncStatus('syncing', 'Fetching…');
+    const res = await fetch(scriptUrl + '?action=get', { method: 'GET' });
+    const json = await res.json();
+    if (json.rows && json.rows.length > 0) {
+      // Merge sheets data with greyed flags from our local data (by repoId)
+      const greyMap = {};
+      data.forEach(d => { if (d.greyed) greyMap[d.repoId] = true; });
+      data = json.rows.map(row => {
+        const obj = {};
+        COLS.forEach((c, i) => obj[c] = row[i] || '');
+        if (greyMap[obj.repoId] && !obj.ba.trim()) obj.greyed = true;
+        return obj;
+      });
+      buildModuleFilter();
+      render();
+    }
+    const now = new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+    setSyncStatus('synced', `Synced ${now}`);
+  } catch(e) {
+    setSyncStatus('error', 'Sync failed');
+  }
+}
+
+async function pushRowToSheets(rowIdx) {
+  if (!scriptUrl) return;
+  const d = data[rowIdx];
+  const rowData = COLS.map(c => d[c] || '');
+  try {
+    setSyncStatus('syncing', 'Saving…');
+    const res = await fetch(scriptUrl, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'update', repoId: d.repoId, row: rowData })
+    });
+    const json = await res.json();
+    if (json.success) {
+      const now = new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+      setSyncStatus('synced', `Saved ${now}`);
+      showToast('✓ Synced to Google Sheets', 'success');
+    } else {
+      throw new Error(json.error);
+    }
+  } catch(e) {
+    setSyncStatus('error', 'Save failed — stored locally');
+    showToast('⚠ Saved locally (Sheets unreachable)', 'err');
+  }
+}
+
+function debounceSave(rowIdx) {
+  clearTimeout(pendingSaves[rowIdx]);
+  pendingSaves[rowIdx] = setTimeout(() => pushRowToSheets(rowIdx), 800);
+}
+
+function startPolling() {
+  clearInterval(pollTimer);
+  if (scriptUrl) pollTimer = setInterval(fetchFromSheets, POLL_INTERVAL);
+}
+
+// ─── SETUP BANNER ─────────────────────────────────────────────────────────────
+function saveScriptUrl() {
+  const val = document.getElementById('scriptUrlInput').value.trim();
+  if (!val.startsWith('https://script.google.com')) {
+    alert('Please paste a valid Google Apps Script URL.');
+    return;
+  }
+  scriptUrl = val;
+  localStorage.setItem('ba_script_url', scriptUrl);
+  document.getElementById('setupBanner').classList.add('hidden');
+  showToast('✓ Connected! Loading data…', 'success');
+  fetchFromSheets();
+  startPolling();
+}
+
+function dismissBanner() {
+  document.getElementById('setupBanner').classList.add('hidden');
+}
+
+// ─── LOCK / UNLOCK ────────────────────────────────────────────────────────────
+function toggleLock() {
+  if (baUnlocked) {
+    baUnlocked = false;
+    document.getElementById('lockBtn').classList.remove('unlocked');
+    document.getElementById('lockIcon').textContent = '🔒';
+    document.getElementById('lockLabel').textContent = 'BA Names Locked';
+    render();
+  } else {
+    document.getElementById('modalOverlay').classList.add('open');
+    setTimeout(() => document.getElementById('pwInput').focus(), 100);
+  }
+}
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('open');
+  document.getElementById('pwInput').value = '';
+  document.getElementById('pwError').textContent = '';
+  document.getElementById('pwInput').classList.remove('error');
+}
+function confirmPw() {
+  if (document.getElementById('pwInput').value === CORRECT_PW) {
+    baUnlocked = true;
+    closeModal();
+    document.getElementById('lockBtn').classList.add('unlocked');
+    document.getElementById('lockIcon').textContent = '🔓';
+    document.getElementById('lockLabel').textContent = 'BA Names Unlocked';
+    render();
+  } else {
+    document.getElementById('pwError').textContent = 'Incorrect password. Try again.';
+    document.getElementById('pwInput').classList.add('error');
+    document.getElementById('pwInput').value = '';
+    document.getElementById('pwInput').focus();
+  }
+}
+
+// ─── RENDER ───────────────────────────────────────────────────────────────────
+function sortBy(key) {
+  sortKey === key ? sortDir *= -1 : (sortKey = key, sortDir = 1);
+  render();
+}
+function getStatusClass(s) { return STATUS_CLASS[s] || 'status-unassigned'; }
+
+function buildModuleFilter() {
+  const sel = document.getElementById('filterModule');
+  const cur = sel.value;
+  const mods = [...new Set(data.map(d => d.module).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">All Modules</option>' + mods.map(m => `<option value="${m}" ${m===cur?'selected':''}>${m}</option>`).join('');
+}
+
+function updateStats() {
+  const counts = {};
+  STATUS_OPTIONS.forEach(s => counts[s] = 0);
+  data.forEach(d => { if (counts[d.status] !== undefined) counts[d.status]++; });
+  document.getElementById('statsRow').innerHTML = STATUS_OPTIONS.map(s =>
+    `<div class="stat-chip">
+      <div class="stat-dot" style="background:${STATUS_COLORS[s]}"></div>
+      <span class="stat-count">${counts[s]}</span>
+      <span class="stat-label">${s}</span>
+    </div>`).join('');
+}
+
+function esc(str) {
+  return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function render() {
+  const q  = document.getElementById('searchInput').value.toLowerCase();
+  const fs = document.getElementById('filterStatus').value;
+  const fm = document.getElementById('filterModule').value;
+
+  let rows = data.map((d,i) => ({...d, _i:i})).filter(d => {
+    const text = [d.module,d.screen,d.repoId,d.ba,d.status,d.comment,d.update].join(' ').toLowerCase();
+    return (!q||text.includes(q)) && (!fs||d.status===fs) && (!fm||d.module===fm);
+  });
+  if (sortKey) rows.sort((a,b) => (a[sortKey]||'').localeCompare(b[sortKey]||'')*sortDir);
+
+  const tbody = document.getElementById('tableBody');
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="10" class="no-results">No tasks match your filters</td></tr>`;
+    updateStats(); return;
+  }
+
+  tbody.innerHTML = rows.map(d => {
+    const sc   = getStatusClass(d.status);
+    const opts = STATUS_OPTIONS.map(s=>`<option value="${s}" ${d.status===s?'selected':''}>${s}</option>`).join('');
+    const isGreyed = d.greyed && !d.ba.trim();
+    const baCell = baUnlocked
+      ? `<input class="ba-input" type="text" value="${esc(d.ba)}" data-idx="${d._i}" data-field="ba" oninput="handleBaInput(this)" onchange="changeField(this)" placeholder="Assign BA…">`
+      : `<span class="ba-name" style="${isGreyed?'color:#b0b6c3;font-style:italic;':''}">${esc(d.ba)||(isGreyed?'<span style=\'color:#b0b6c3;font-style:italic;\'>Unassigned</span>':'<span style=\'color:var(--muted)\'>—</span>')}</span>`;
+
+    return `<tr id="row-${d._i}">
+      <td><span class="module-tag">${esc(d.module)}</span></td>
+      <td class="screen-name">${esc(d.screen)}</td>
+      <td class="repo-id">${esc(d.repoId)}</td>
+      <td>${baCell}</td>
+      <td><input class="effort-input" type="text" placeholder="—" value="${esc(d.devEff)}" data-idx="${d._i}" data-field="devEff" onchange="changeField(this)"></td>
+      <td><input class="effort-input" type="text" placeholder="—" value="${esc(d.qaEff)}" data-idx="${d._i}" data-field="qaEff" onchange="changeField(this)"></td>
+      <td><select class="status-select ${sc}" data-idx="${d._i}" onchange="changeStatus(this)">${opts}</select></td>
+      <td><input class="eta-input" type="text" placeholder="dd/mm/yy" value="${esc(d.eta)}" data-idx="${d._i}" data-field="eta" onchange="changeField(this)"></td>
+      <td><input class="ba-update-input" type="text" placeholder="Add update…" value="${esc(d.update)}" data-idx="${d._i}" data-field="update" onchange="changeField(this)"></td>
+      <td class="comment-cell">${esc(d.comment)||'<span style="color:var(--border)">—</span>'}</td>
+    </tr>`;
+  }).join('');
+  updateStats();
+}
+
+// ─── CHANGE HANDLERS ─────────────────────────────────────────────────────────
+function changeStatus(sel) {
+  const idx = +sel.dataset.idx;
+  data[idx].status = sel.value;
+  sel.className = 'status-select ' + getStatusClass(sel.value);
+  updateStats();
+  debounceSave(idx);
+}
+function handleBaInput(input) {
+  if (input.value.trim()) data[+input.dataset.idx].greyed = false;
+}
+function changeField(input) {
+  const idx = +input.dataset.idx;
+  data[idx][input.dataset.field] = input.value;
+  if (input.dataset.field === 'ba') {
+    data[idx].greyed = !input.value.trim();
+    render();
+  }
+  debounceSave(idx);
+}
+
+// ─── TOAST ────────────────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `saved-toast show ${type}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+// ─── EXPORT ───────────────────────────────────────────────────────────────────
+function exportCSV() {
+  const hdrs = ["Module","Screen / Feature","Repo ID","Business Analyst","Dev Effort (MD)","QA Effort (MD)","Status","ETA","BA Update","BA Lead Comment"];
+  const rows = data.map(d => [d.module,d.screen,d.repoId,d.ba,d.devEff||'',d.qaEff||'',d.status,d.eta,d.update,d.comment].map(v=>`"${String(v).replace(/"/g,'""')}"`).join(','));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([[hdrs.join(','),...rows].join('\n')],{type:'text/csv'}));
+  a.download = 'BA_Action_Tracker.csv'; a.click();
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+if (scriptUrl) {
+  document.getElementById('setupBanner').classList.add('hidden');
+  document.getElementById('scriptUrlInput').value = scriptUrl;
+  fetchFromSheets();
+  startPolling();
+} else {
+  setSyncStatus('', 'Not connected');
+}
+buildModuleFilter();
+render();
+</script>
+</body>
+</html>
